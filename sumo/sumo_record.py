@@ -6,241 +6,180 @@ import robotparser #for check a wbe page can be fetched or not
 import datetime
 import time
 import json
-
-from lxml import etree
 from urllib2 import urlopen, Request
 from collections import OrderedDict
 
+from lxml import etree
 
-retr_text = lambda nodes, pipe='': pipe.join([''.join(i.itertext()) for i in nodes])
-retr_one = lambda nodes: nodes.text if len(nodes)==0 else nodes[0].text
-retr_list = lambda nodes : filter(None, [i.strip() for i in nodes.itertext()])
+from constants import BASE_URL
+from constants import HEADER
+from constants import GZIP_HEADER
+from constants import WIN_LOSE_TYPE_DICT
 
-
-sumo_homepage_url = 'http://www.sumo.or.jp/'
-base_url = 'http://www.sumo.or.jp/honbasho/main/hoshitori#east'
-
-gzip_headers = {
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-    'User-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/37.0.2062.124 Safari/537.36',
-    'Accept-Encoding': 'gzip,deflate,sdch',
-#    'Accept-Language': 'ja,zh-TW;q=0.8,zh;q=0.6,en;q=0.4,en-US;q=0.2',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
-    'Host': 'www.sumo.or.jp',
-    'Pragma': 'no-cache',
-}
-
-headers = {
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-    'User-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/37.0.2062.124 Safari/537.36',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
-    'Host': 'www.sumo.or.jp',
-    'Pragma': 'no-cache',
-}
-
-win_lose_type = {
-    u'\u767d\u4e38' : 0,         # 白丸
-    u'\u9ED2\u4E38' : 1,         # 黑丸
-    u'\u4E0D\u6226\u52DD' : 2,   # 不戰勝
-    u'\u4E0D\u6226\u6557' : 3,   # 不戰敗
-    u'\u4F11\u307F' : 4,         # 休み
-    u'\u5F15\u5206' : 5,         # 引分
-    u'\u75DB\u5206' : 6          # 痛分
-}
-
-
-
-done_dict = []
-
-def add_into_done_list(key_string):
-
-    global done_dict
-    done_dict.append(key_string)
-
-    with open('output/done_lists.txt', 'a+') as f:
-        f.write(key_string + '\n')
+dir_name = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(dir_name + '/../')
+from py_utils import compress
 
 
 def save_total_record_json(data):
-    ## save info into json
-    dateStr = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+    # Save info into json file
+    date_str = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
 
-    with open('output/' + dateStr + '.json', 'w+') as f:
+    output_dir = 'output/%s/total/' % data['date']
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    with open(output_dir + date_str + '.json', 'w+') as f:
         doc_str = json.dumps(data)
-        f.write(doc_str)
+        f.write(doc_str + '\n')
 
 
-def save_single_date_record_json(data):
-    return
+def save_single_record_json(day, data):
+    # Save info into json file
+    date_str = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+
+    output_dir = 'output/%s/single_day/' % data['date']
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    with open(output_dir + date_str + '.json', 'w+') as f:
+        doc_str = json.dumps(data)
+        f.write(doc_str + '\n')
 
 
-def parse_HTML(data):
-
-    #totalRecord = {}
-    totalRecord = OrderedDict()
-
-    tree = etree.HTML(data)
-
-    # get date
-    date = tree.xpath('//*/div[@id="content"]/div[@id="mainContent"]/p[@class="mdDate"]')
-    totalRecord['date'] = date[0].text.strip()
-
-    # get east total record
-    east_elements = tree.xpath('//*/div[@id="east"]/table[@class="main "]/tr')
-    # print len(east_elements)
-
-    # get EAST player name, rank, and total record with competitor
-    for index in xrange(0, len(east_elements), 2):
-
-        singlePlayer = {}
-
-        playerInfo = east_elements[index].xpath('td[@class="player bBnone"]/div/dl')
-        recordInfo = east_elements[index].xpath('td/img')
-        competitorInfo = east_elements[index+1].xpath('td')
+class SumoRecord(object):
+    def __init__(self):
+        pass
 
 
-        if len(playerInfo) == 1:
-            info = retr_list(playerInfo[0])
-            singlePlayer['rank'] = info[0]
-            singlePlayer['name'] = info[1]
-            singlePlayer['record'] = info[2]
-            # print info[0], info[1], info[2]
-
-        #print singlePlayer
-
-        wbRecord = [win_lose_type.get(i.get('alt')) for i in recordInfo]
-        singlePlayer['win_lose_list'] = wbRecord
-        #print wbRecord
+    def printd(self):
+        pass
 
 
-        # get competitor info and order
-        comRecord = [i.text if i.text else "" for i in competitorInfo]
-        singlePlayer['competitor_list'] = comRecord
-        #print comRecord
+    def get_total_record(self):
+        """ Get total record from starting day to now during current season
+
+        Returns:
+            OrderedDict: with total record and date
+
+            "record":"9勝6敗",
+            "competitor_list":[],
+            "win_lose_list":[],
+            "name":"鶴竜",
+            "rank":"横綱"
+
+        """
+        #raw_HTML_data = self.__get_HTML_data(BASE_URL)
+        raw_HTML_data = self.__get_gzip_HTML_data(BASE_URL)
+
+        result_data = self.__parse_total_record(raw_HTML_data)
+
+        return result_data
 
 
-        totalRecord["E" + str(index/2 + 1)] = singlePlayer
+    def get_single_day_record(self, day=1):
+        """ Get single day record during current season.
+
+        Args:
+            day(int): The
+
+        Returns:
+
+        """
+        pass
 
 
-
-    # get west total record
-    west_elements = tree.xpath('//*/div[@id="west"]/table[@class="main "]/tr')
-    # print len(west_elements)
-
-    # get WEST player name, rank, and total record with competitor
-    for index in xrange(0, len(west_elements), 2):
-
-        singlePlayer = {}
-
-        playerInfo = west_elements[index].xpath('td[@class="player bBnone"]/div/dl')
-        recordInfo = west_elements[index].xpath('td/img')
-        competitorInfo = west_elements[index+1].xpath('td')
+    def __get_HTML_data(self, url):
+        """  """
+        req = Request(url, None, HEADER)
+        page = urlopen(req)
+        return page.read()
 
 
-        if len(playerInfo) == 1:
-            info = retr_list(playerInfo[0])
-            singlePlayer['rank'] = info[0]
-            singlePlayer['name'] = info[1]
-            singlePlayer['record'] = info[2]
-            # print info[0], info[1], info[2]
-
-        #print singlePlayer
-
-        wbRecord = [win_lose_type.get(i.get('alt')) for i in recordInfo]
-        singlePlayer['win_lose_list'] = wbRecord
-        #print wbRecord
+    def __get_gzip_HTML_data(self, url):
+        """  """
+        req = Request(url, None, GZIP_HEADER)
+        gzip_page = urlopen(req)
+        data = compress.ungzip_html(gzip_page)
+        return data
 
 
-        # get competitor info and order
-        comRecord = [i.text if i.text else "" for i in competitorInfo]
-        singlePlayer['competitor_list'] = comRecord
-        #print comRecord
+    def __parse_total_record(self, web_page_data):
+        """  """
+        total_record = OrderedDict()
+
+        # Get date
+        tree = etree.HTML(web_page_data)
+        date = tree.xpath('//*/div[@id="content"]/div[@id="mainContent"]/p[@class="mdDate"]')
+        total_record['date'] = date[0].text.strip()
+
+        # Get east result
+        east_result = self.__parse_total_record_by_side(tree, True)
+        for index in xrange(len(east_result)):
+            total_record["E" + str(index+1)] = east_result[index]
+
+        # Get west result
+        west_result = self.__parse_total_record_by_side(tree, False)
+        for index in xrange(len(west_result)):
+            total_record["W" + str(index+1)] = west_result[index]
+
+        return total_record
 
 
-        totalRecord["W" + str(index/2 + 1)] = singlePlayer
+    def __parse_total_record_by_side(self, xml_tree, is_east=True):
+        """  """
+        each_elements = None
+        if is_east:
+            each_elements = xml_tree.xpath('//*/div[@id="east"]/table[@class="main "]/tr')
+        else:
+            each_elements = xml_tree.xpath('//*/div[@id="west"]/table[@class="main "]/tr')
+
+        # print len(east_elements)
+
+        result = []
+        # Get each player name, rank, and total record with competitor
+        for index in xrange(0, len(each_elements), 2):
+
+            single_player_data = {}
+
+            player_info = each_elements[index].xpath('td[@class="player bBnone"]/div/dl')
+            record_info = each_elements[index].xpath('td/img')
+            competitor_info = each_elements[index+1].xpath('td')
+
+            if len(player_info) == 1:
+                info = self.get_retr_list(player_info[0])
+                single_player_data['rank'] = info[0]
+                single_player_data['name'] = info[1]
+                single_player_data['record'] = info[2]
+                # print info[0], info[1], info[2]
+
+            #print single_player_data
+
+            wb_record = [WIN_LOSE_TYPE_DICT.get(i.get('alt')) for i in record_info]
+            single_player_data['win_lose_list'] = wb_record
+            #print wb_record
+
+            # Get competitor info and order
+            com_record = [i.text if i.text else "" for i in competitor_info]
+            single_player_data['competitor_list'] = com_record
+
+            #print com_record
+            result.append(single_player_data)
+
+        return result
 
 
-    # for keys, values in totalRecord.items():
-    #     print keys, values
-    #     print "=" * 20
-
-    # print len(totalRecord)
-
-    # print json.dumps(totalRecord)
-    return totalRecord
-
-
-def parse_single_dateH_TML(data):
-    return
-
-
-def save_to_file(data):
-
-    global done_dict
-    filename = done_dict[-1]+'.html'
-
-    print filename
-
-    with open('output/' + filename, 'a+') as f:
-        f.write(data)
-
-
-def q(url):
-    req = urllib2.Request(url, None, headers)
-    resp = urllib2.urlopen(req)
-    data = ungzip(resp)
-    return data
-
-
-def get_data(url):
-    req = urllib2.Request(url, None, headers)
-    page = urllib2.urlopen(req) 
-    return page.read()
+    @staticmethod
+    def get_retr_list(nodes):
+        """  """
+        return filter(None, [i.strip() for i in nodes.itertext()])
 
 
 
 ######## Main Start ########
-
 if __name__=="__main__":
-    #reload(sys)
-    #sys.setdefaultencoding('utf-8')
 
-    ## set init
-    queues = {
-        'total' : 'http://www.sumo.or.jp/honbasho/main/hoshitori',
-        'singleDay' : 'http://www.sumo.or.jp/honbasho/main/torikumi?day=%d&rank=1'
-    }
-
-
-    while len(queues) > 0:
-        time.sleep(5)
-
-        key, value = queues.popitem()
-        print key, value
-
-        currentDate = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        add_into_done_list(currentDate)
-
-        if key == 'total':
-            add_into_done_list(key + " : " + value)
-            data = getData(value)
-
-            resultData = parse_HTML(data)
-            save_total_record_json(resultData)
-        else:
-            for x in xrange(1, 16):
-                time.sleep(5)
-                print value % x
-                add_into_done_list(key + " : " + (value % x))
-
-
-
-
-        print 'Here has queues =>', len(queues)
-        print '-' * 20
-
-    add_into_done_list('-' * 20)
-
-print '===== Done ====='
+    sumo_record = SumoRecord()
+    total_result = sumo_record.get_total_record()
+    save_total_record_json(total_result)
+    print "DONE"
